@@ -23,9 +23,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 
-// Import the AI SDK
-import { useChat } from "ai/react"
-
 // Import the markdown renderer
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 
@@ -524,38 +521,19 @@ interface ChatMessage {
 }
 
 export default function DashboardPage() {
-  const [activeComponent, setActiveComponent] = useState<string | null>(null)
-  const [activeComponentProps, setActiveComponentProps] = useState<any>(null)
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
-  const [isThinking, setIsThinking] = useState(false)
-  const [inputValue, setInputValue] = useState("")
-  const chatEndRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
-
-  // Sample questions
-  const sampleQuestions = [
-    "What is My AUM?",
-    "Is there any payout mismatch?",
-    "Which clients are at risk?",
-    "Which client meetings do I have today?",
-  ]
-
-  // Initialize the AI chat
-  const { messages, input, handleInputChange, handleSubmit, isLoading, append } = useChat({
-    api: "/api/dashboard-chat",
-    initialMessages: [],
-    onFinish: (message) => {
-      // Process the AI response to determine which component to show
-      processAIResponse(message)
-    },
-  })
+  const [selectedView, setSelectedView] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([])
+  const [input, setInput] = useState("")
+  const [loading, setLoading] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Scroll to bottom of chat when new messages are added
   useEffect(() => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" })
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
     }
-  }, [chatMessages, isThinking])
+  }, [messages])
 
   // Handle client selection for portfolio view
   const handleClientSelection = (clientId: string, preventNavigation = false) => {
@@ -570,7 +548,7 @@ export default function DashboardPage() {
   // Function to call OpenAI API with web search
   const callOpenAIWithWebSearch = async (userMessage: string) => {
     try {
-      setIsThinking(true)
+      setLoading(true)
 
       // Create a message object for the API
       const messages = [
@@ -600,30 +578,26 @@ export default function DashboardPage() {
       console.log("AI search API response:", JSON.stringify(data))
 
       // Add the assistant's response to chat messages
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
-          id: Date.now().toString(),
           role: "assistant",
           content: data.content || "I couldn't find information about that. Please try asking something else.",
-          isSearchResult: true,
         },
       ])
     } catch (error) {
       console.error("Error calling OpenAI API:", error)
 
       // Add error message to chat
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
-          id: Date.now().toString(),
           role: "assistant",
           content: "I encountered an error while processing your request. Please try again with a different question.",
-          isSearchResult: true,
         },
       ])
     } finally {
-      setIsThinking(false)
+      setLoading(false)
     }
   }
 
@@ -654,31 +628,27 @@ export default function DashboardPage() {
       }
 
       // Add the assistant's response to chat messages
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
-          id: Date.now().toString(),
           role: "assistant",
           content: data.content || "I couldn't find information about that. Please try asking something else.",
-          isSearchResult: true,
         },
       ])
     } catch (error) {
       console.error("Error calling fallback API:", error)
 
       // Add error message to chat
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
-          id: Date.now().toString(),
           role: "assistant",
           content:
             "I'm having trouble connecting to my knowledge base. Please try again later or ask about your portfolio data instead.",
-          isSearchResult: true,
         },
       ])
     } finally {
-      setIsThinking(false)
+      setLoading(false)
     }
   }
 
@@ -692,20 +662,19 @@ export default function DashboardPage() {
 
     // Add user message to chat messages
     const userMessageId = Date.now().toString()
-    setChatMessages((prev) => [
+    setMessages((prev) => [
       ...prev,
       {
-        id: userMessageId,
         role: "user",
         content: userMessage,
       },
     ])
 
     // Clear the input field
-    setInputValue("")
+    setInput("")
 
     // Show thinking indicator
-    setIsThinking(true)
+    setLoading(true)
 
     // Handle hardcoded questions
     const lowerMessage = userMessage.toLowerCase()
@@ -714,7 +683,7 @@ export default function DashboardPage() {
     if (lowerMessage.includes("my aum") || lowerMessage.includes("show me my aum")) {
       const assistantMessage = "Here's your current AUM breakdown. Your total AUM is ₹188 Cr across 221 clients."
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -725,12 +694,12 @@ export default function DashboardPage() {
 
       setActiveComponent("business-insights")
       setActiveComponentProps({ data: wealthAdvisorData.businessMetrics })
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("payout mismatch") || lowerMessage.includes("commission mismatch")) {
       const assistantMessage =
         "I've found some commission discrepancies with several AMCs. Let me show you the details."
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -741,12 +710,12 @@ export default function DashboardPage() {
 
       setActiveComponent("commission-mismatch-overview")
       setActiveComponentProps({ data: wealthAdvisorData.commissionMismatches })
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("clients at risk") || lowerMessage.includes("which clients are at risk")) {
       const assistantMessage =
         "I've identified several clients whose portfolios are at risk. Let me show you the details."
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -757,11 +726,11 @@ export default function DashboardPage() {
 
       setActiveComponent("clients-at-risk")
       setActiveComponentProps({ data: wealthAdvisorData.clientsAtRisk })
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("client meeting")) {
       const assistantMessage = "You have 2 client meetings scheduled for today:"
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -773,7 +742,7 @@ export default function DashboardPage() {
       // Also set the component in the right panel
       setActiveComponent("today-meetings")
       setActiveComponentProps({})
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("meeting note") || lowerMessage.includes("last meetings")) {
       const assistantMessage = "Here are the meeting notes from your recent client meetings:"
 
@@ -789,7 +758,7 @@ export default function DashboardPage() {
         />
       )
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -798,7 +767,7 @@ export default function DashboardPage() {
           component: meetingNotesComponent,
         },
       ])
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("prepare for meeting")) {
       const assistantMessage = "Here are the meeting notes from your recent client meetings:"
 
@@ -814,7 +783,7 @@ export default function DashboardPage() {
         />
       )
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -823,12 +792,12 @@ export default function DashboardPage() {
           component: meetingNotesComponent,
         },
       ])
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("need rebalancing")) {
       const assistantMessage =
         "I've identified several clients whose portfolios need rebalancing. Let me show you the details."
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -843,11 +812,11 @@ export default function DashboardPage() {
         data: wealthAdvisorData.clientsNeedingRebalancing,
         preventNavigation: true,
       })
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("hdfc midcap fund") && lowerMessage.includes("portfolio")) {
       const assistantMessage = "Here are the clients who have HDFC Midcap Fund in their portfolio:"
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -859,12 +828,12 @@ export default function DashboardPage() {
       // Also set the component in the right panel
       setActiveComponent("hdfc-midcap-clients")
       setActiveComponentProps({})
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("replace hdfc midcap") || lowerMessage.includes("less volatile fund")) {
       const assistantMessage = "Here are some less volatile alternatives to HDFC Midcap Fund:"
 
       // Show component in chat
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -886,11 +855,11 @@ export default function DashboardPage() {
           ),
         },
       ])
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("portfolio x-ray") && lowerMessage.includes("new client")) {
       const assistantMessage = "I'll start the portfolio X-Ray process for a new client."
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -902,12 +871,12 @@ export default function DashboardPage() {
       setTimeout(() => {
         router.push("/dashboard/planner?startNewXRay=true")
       }, 1500)
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("portfolio x-ray") && lowerMessage.includes("rahul")) {
       const client = wealthAdvisorData.clients[0] // Vikram Mehta
       const assistantMessage = "Opening portfolio X-Ray for Rahul Sharma."
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -919,11 +888,11 @@ export default function DashboardPage() {
       // Show in right panel
       setActiveComponent("portfolio-xray")
       setActiveComponentProps({ clientId: "c1", clientData: client })
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("rahul") && lowerMessage.includes("goals")) {
       const assistantMessage = "Let me check if Rahul Sharma's goals are on track."
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -934,11 +903,11 @@ export default function DashboardPage() {
 
       setActiveComponent("client-goals")
       setActiveComponentProps({ clientId: "c1" })
-      setIsThinking(false)
+      setLoading(false)
     } else if (lowerMessage.includes("key insights") || lowerMessage.includes("insights for me")) {
       const assistantMessage = "Here are some key insights to optimize your commission earnings."
 
-      setChatMessages((prev) => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
@@ -948,7 +917,7 @@ export default function DashboardPage() {
       ])
 
       setActiveComponent("commission-optimization-full")
-      setIsThinking(false)
+      setLoading(false)
     } else {
       // For all other queries, use OpenAI with web search
       try {
